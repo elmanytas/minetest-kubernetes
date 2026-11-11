@@ -8,12 +8,14 @@ image:
     ##
     registry: docker.io
     repository: linuxserver/minetest
-    tag: latest
+    ## Pin to a specific version to avoid breaking changes
+    ## Available: 5.5.0, 5.8.0, 5.9.0, 5.10.0
+    tag: "5.10.0"
     ## Specify a imagePullPolicy
     ## Defaults to 'Always' if image tag is 'latest', else set to 'IfNotPresent'
     ## ref: http://kubernetes.io/docs/user-guide/images/#pre-pulling-images
     ##
-    pullPolicy: Always
+    pullPolicy: IfNotPresent
     ## Optionally specify an array of imagePullSecrets.
     ## Secrets must be manually created in the namespace.
     ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
@@ -49,20 +51,33 @@ nameOverride: {}
 fullnameOverride: {}
 #   chart:
 
-## Port to expose to the internet
+## Port for the Minetest server (container port)
 minetestPort: 30000
 
 ## Minetest timezone
 minetestTimezone: Europe/Madrid
 
-## Cli Arguments
-# cliArgs: "--gameid minetest"
+## Container user/group/umask
+## ref: https://docs.linuxserver.io/general/usage/docker-configuration
+##
+container:
+  puid: 911
+  pgid: 911
+  umask: "002"
+
+## Game ID to use (e.g., mineclone2, minetest, realtest_mt5)
+## If set, this is passed to the server via --gameid
+##
+gameid: ""
+
+## Cli Arguments (raw, appended to the server command)
+# cliArgs: "--gameid mineclone2"
 cliArgs: ""
 
 ## Do a backup before minetest start
 backup: false
 
-## Lauch specific game
+## Launch specific game from content.minetest.net
 ## Go to https://content.minetest.net/packages/?type=game, choose a game and
 ## configure its url WITHOUT / in the end or set this var to false to
 ## autogenerate a world with default minetest game.
@@ -110,9 +125,13 @@ timeSpeed: 72
 ##
 service:
   type: ClusterIP
-  ## Public UDP Port
+  ## Service port (the port clients connect to)
   ##
   port: 30000
+  ## Target port (the port the container listens on)
+  ## Usually the same as minetestPort
+  ##
+  targetPort: 30000
   ## Enable client source IP preservation
   ## ref http://kubernetes.io/docs/tasks/access-application-cluster/create-external-load-balancer/#preserving-the-client-source-ip
   ##
@@ -136,7 +155,7 @@ nodeSelector: {}
 tolerations: []
 
 ## Affinity for pod assignment
-## Ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+## Ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
 ##
 affinity: {}
 
@@ -145,8 +164,8 @@ affinity: {}
 ##
 podAnnotations: {}
 
-## Configure the ingress resource that allows you to access the
-## WordPress installation. Set up the URL
+## Configure the ingress resource that allows you to access
+## the web interface. Set up the URL
 ## ref: http://kubernetes.io/docs/user-guide/ingress/
 ##
 ingress:

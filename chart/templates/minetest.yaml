@@ -43,56 +43,66 @@ spec:
       {{- end }}
       {{- if .Values.setGame }}
       - name: setgame
-        image: kubeless/unzip
+        image: alpine:3.20
         command:
-          - sh
+          - /bin/sh
           - -c
-          - mkdir -p /config/.minetest/games/$(echo {{ .Values.gameUrl }} | awk -F "/" '{print $(NF)}');
-            cd       /config/.minetest/games/$(echo {{ .Values.gameUrl }} | awk -F "/" '{print $(NF)}');
-            curl -L -o game.zip {{ .Values.gameUrl }}/download;
-            unzip game.zip;
+          - |
+            apk add --no-cache curl unzip > /dev/null 2>&1;
+            GAME=$(echo {{ .Values.gameUrl }} | awk -F "/" '{print $(NF)}');
+            mkdir -p /config/.minetest/games/;
+            cd /config/.minetest/games/;
+            curl -L -o /tmp/game.zip {{ .Values.gameUrl }}/download;
+            unzip /tmp/game.zip -d /config/.minetest/games/;
+            rm -f /tmp/game.zip;
             mkdir -p /config/.minetest/main-config/;
-            echo "default_game = $(echo {{ .Values.gameUrl }} | awk -F "/" '{print $(NF)}')" > /config/.minetest/main-config/minetest.conf
+            echo "default_game = ${GAME}" > /config/.minetest/main-config/minetest.conf
         volumeMounts:
           - name: minetest-config
             mountPath: /config
       {{- end }}
       {{- if .Values.setOptions }}
       - name: options
-        image: kubeless/unzip
+        image: alpine:3.20
         command:
-          - sh
+          - /bin/sh
           - -c
           - |
-            echo """
+            mkdir -p /config/.minetest/main-config/;
+            cat >> /config/.minetest/main-config/minetest.conf <<EOF
             enable_damage = {{ .Values.enableDamage }}
             creative_mode = {{ .Values.creativeMode }}
             free_mode = {{ .Values.freeMode }}
             fast_mode = {{ .Values.fastMode }}
             autojump = {{ .Values.autojump }}
             time_speed = {{ .Values.timeSpeed }}
-            """ >> /config/.minetest/main-config/minetest.conf
+            EOF
         volumeMounts:
           - name: minetest-config
             mountPath: /config
       {{- end }}
       containers:
       - name: minetest
-        image: {{ .Values.image.minetest.repository }}:{{ default .Values.minetestVersion .Values.image.minetest.tag }}
-        imagePullPolicy: Always
+        image: "{{ .Values.image.minetest.registry }}/{{ .Values.image.minetest.repository }}:{{ .Values.image.minetest.tag }}"
+        imagePullPolicy: {{ .Values.image.minetest.pullPolicy }}
         volumeMounts:
           - name: minetest-config
             mountPath: /config/.minetest
             subPath: .minetest
         env:
           - name: TZ
-            value: "{{ default .Values.minetestTimezone }}"
+            value: "{{ .Values.minetestTimezone }}"
+          - name: PUID
+            value: "{{ .Values.container.puid }}"
+          - name: PGID
+            value: "{{ .Values.container.pgid }}"
+          - name: UMASK
+            value: "{{ .Values.container.umask }}"
           - name: CLI_ARGS
-            value: "{{ .Values.cliArgs }}"
+            value: "{{ .Values.cliArgs }}{{- if .Values.gameid }} --gameid {{ .Values.gameid }}{{- else if .Values.setGame }} --gameid {{ (last (splitList "/" .Values.gameUrl)) }}{{- end }}"
         ports:
           - name: minetest
-            containerPort: 30000
-            hostPort: {{ .Values.minetestPort }}
+            containerPort: {{ .Values.minetestPort }}
             protocol: UDP
         {{- with .Values.resources }}
         resources:
@@ -126,5 +136,6 @@ spec:
     component: minetest
   ports:
   - name: minetest
-    port: {{ .Values.minetestPort }}
+    port: {{ .Values.service.port }}
+    targetPort: {{ .Values.service.targetPort }}
     protocol: UDP
